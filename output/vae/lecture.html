@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Variational Autoencoders — Interactive Lecture</title>
+
+<script>
+window.MathJax = {
+  tex: { inlineMath: [['\\(','\\)']], displayMath: [['$$','$$'],['\\[','\\]']] },
+  svg: { fontCache: 'global' },
+  startup: { typeset: true }
+};
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-svg.min.js"></script>
+
+<style>
+/* house standard palette */
+:root{
+  --bg:#070b16; --bg2:#0b1120; --panel:#0e1729; --panel2:#121d36; --line:#1f2d4d;
+  --ink:#e7edf9; --muted:#93a4c8; --dim:#64759c;
+  --cyan:#38f0d8; --cyan2:#19c4ff; --violet:#9b8cff; --pink:#ff6ec7;
+  --amber:#ffcb6b; --green:#62e88a; --red:#ff6b81;
+  --glow:0 0 18px rgba(56,240,216,.45); --r:16px;
+  --mono:'SFMono-Regular',ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+}
+html{box-sizing:border-box;scroll-behavior:smooth;}
+*,*::before,*::after{box-sizing:inherit;margin:0;padding:0;}
+body{
+  font-family:Inter,system-ui,-apple-system,sans-serif;
+  background:var(--bg);color:var(--ink);
+  line-height:1.6;font-size:16px;
+  overflow-x:hidden;
+}
+
+/* Light theme overrides (chrome only) */
+[data-theme="light"] {
+  --bg:#f8fafc; --bg2:#f1f5f9; --line:#e2e8f0;
+  --ink:#0f172a; --muted:#64748b; --dim:#94a3b8;
+}
+
+/* Layout */
+.shell{display:grid;grid-template-columns:288px 1fr;min-height:100vh;}
+.sidebar{
+  position:sticky;top:0;height:100vh;overflow-y:auto;
+  background:var(--bg2);border-right:1px solid var(--line);
+  padding:24px 20px;
+}
+.brand{display:flex;align-items:center;gap:12px;font-weight:600;font-size:15px;margin-bottom:32px;line-height:1.2;}
+.brand small{display:block;font-weight:400;color:var(--muted);font-size:13px;margin-top:2px;}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:var(--glow);}
+
+.toc .grp{font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);font-weight:600;margin:24px 0 8px 0;}
+.toc a{
+  display:flex;align-items:baseline;gap:12px;
+  padding:6px 10px;margin-bottom:2px;border-radius:6px;
+  color:var(--ink);text-decoration:none;font-size:14px;
+  transition:all 0.15s;
+}
+.toc a:hover{background:var(--panel);}
+.toc a.active{background:var(--panel);color:var(--cyan);font-weight:500;}
+.toc .n{font-family:var(--mono);font-size:12px;color:var(--dim);}
+.toc a.active .n{color:var(--cyan);}
+
+main{position:relative;padding-bottom:120px;}
+.progress{position:fixed;top:0;left:288px;right:0;height:3px;background:var(--panel);z-index:100;}
+.progress i{display:block;height:100%;background:var(--cyan);width:0;transition:width 0.1s linear;}
+.topbtn{
+  position:absolute;top:24px;right:24px;display:flex;gap:12px;z-index:50;
+}
+.btn{
+  background:var(--panel);border:1px solid var(--line);color:var(--ink);
+  padding:6px 14px;border-radius:20px;font-size:13px;font-family:inherit;
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  transition:all 0.15s;
+}
+.btn:hover{border-color:var(--muted);}
+.btn.active{background:var(--cyan);color:#000;border-color:var(--cyan);font-weight:600;}
+.btn.active:hover{opacity:0.9;}
+
+/* Chapter flow */
+section{padding:80px 0;border-bottom:1px solid var(--line);}
+section:first-child{padding-top:100px;}
+.wrap{max-width:760px;margin:0 auto;padding:0 32px;}
+.kicker{font-family:var(--mono);font-size:13px;color:var(--cyan);margin-bottom:16px;}
+h1{font-size:42px;font-weight:700;line-height:1.1;letter-spacing:-0.02em;margin-bottom:24px;}
+h2{font-size:32px;font-weight:700;letter-spacing:-0.01em;margin-bottom:24px;}
+h3{font-size:20px;font-weight:600;margin:40px 0 16px 0;color:var(--ink);}
+h4{font-size:16px;font-weight:600;margin:0 0 8px 0;}
+p{margin-bottom:20px;}
+.lead{font-size:19px;color:var(--muted);line-height:1.5;margin-bottom:32px;}
+.muted{color:var(--muted);}
+
+/* Typographic mixins */
+a{color:var(--cyan);text-decoration:none;}
+a:hover{text-decoration:underline;}
+ul{margin:0 0 20px 24px;}
+li{margin-bottom:8px;}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;background:var(--panel);border:1px solid var(--line);font-size:12px;font-family:var(--mono);color:var(--muted);margin:0 6px 6px 0;}
+
+/* Components */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:24px;margin:32px 0;}
+.note{border-left:4px solid var(--violet);background:var(--panel);padding:16px 20px;border-radius:0 8px 8px 0;margin:32px 0;font-size:15px;}
+.key{border-left:4px solid var(--amber);background:var(--panel);padding:16px 20px;border-radius:0 8px 8px 0;margin:32px 0;font-size:15px;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:24px 0;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;margin:24px 0;}
+.chips{display:flex;flex-wrap:wrap;gap:8px;}
+
+/* Math */
+.eqbox{
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:20px;margin:24px 0;overflow-x:auto;text-align:center;
+}
+mjx-container[display="true"]{margin:0 !important;overflow-x:auto;max-width:100%;}
+
+/* Labs / Interactives */
+.lab{
+  position:relative;background:var(--bg2);border:1px solid var(--line);
+  border-radius:var(--r);padding:24px;margin:48px 0;
+}
+.lab::before{
+  content:"⚡ INTERACTIVE";position:absolute;top:-12px;left:24px;
+  background:var(--cyan);color:#000;font-family:var(--mono);
+  font-size:10px;font-weight:700;padding:2px 8px;border-radius:12px;
+}
+.readout{
+  font-family:var(--mono);font-size:13px;line-height:1.5;
+  background:#0e1729; /* always dark */
+  color:#93a4c8;border-radius:8px;padding:16px;
+  border:1px solid #1f2d4d;white-space:pre-wrap;
+}
+.readout .hl{color:#ffcb6b;font-weight:600;}
+.readout .g{color:#62e88a;font-weight:600;}
+
+/* Sliders */
+.ctrl{display:flex;align-items:center;gap:12px;margin-bottom:12px;font-family:var(--mono);font-size:13px;color:var(--muted);}
+.ctrl label{width:90px;flex-shrink:0;}
+.ctrl .val{width:40px;text-align:right;color:var(--cyan);}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;flex-grow:1;height:4px;
+  background:var(--line);border-radius:2px;outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:16px;height:16px;
+  border-radius:50%;background:var(--cyan);cursor:pointer;
+  box-shadow:0 0 10px rgba(56,240,216,0.3);
+}
+
+/* Animations / states */
+.reveal{opacity:0;transform:translateY(12px);transition:all 0.6s ease-out;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+@media(prefers-reduced-motion:reduce){
+  .reveal{opacity:1;transform:none;transition:none;}
+  html{scroll-behavior:auto;}
+}
+
+/* Tour / Story Card */
+.storycard{
+  position:fixed;bottom:24px;right:24px;width:340px;
+  background:var(--panel);border:1px solid var(--cyan);border-radius:12px;
+  padding:20px;box-shadow:0 12px 40px rgba(0,0,0,0.4);
+  z-index:100;display:none;
+}
+.storycard.active{display:block;}
+.storycard .t{font-size:12px;font-family:var(--mono);color:var(--cyan);margin-bottom:8px;}
+.storycard .x{font-size:14px;line-height:1.5;margin-bottom:16px;}
+.storycard .nav{display:flex;gap:8px;align-items:center;justify-content:space-between;}
+.spot{
+  position:absolute;width:40px;height:40px;border-radius:50%;
+  border:2px solid var(--cyan);pointer-events:none;z-index:90;
+  transform:translate(-50%,-50%) scale(1.5);opacity:0;
+  transition:all 0.5s cubic-bezier(0.2,0.8,0.2,1);
+}
+.spot.active{transform:translate(-50%,-50%) scale(1);opacity:1;box-shadow:0 0 20px rgba(56,240,216,0.2);}
+
+/* Responsive */
+@media(max-width:1024px){
+  .shell{grid-template-columns:240px 1fr;}
+  .progress{left:240px;}
+}
+@media(max-width:880px){
+  .shell{grid-template-columns:1fr;}
+  .sidebar{height:auto;position:relative;border-right:none;border-bottom:1px solid var(--line);padding:24px;}
+  .progress{left:0;}
+  .grid2,.grid3{grid-template-columns:1fr;}
+  .storycard{left:16px;right:16px;width:auto;bottom:16px;}
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+<aside class="sidebar">
+  <div class="brand"><span class="dot"></span><div>Interactive Lecture<small>Variational Autoencoders</small></div></div>
+  <nav class="toc" id="toc">
+    <div class="grp">Foundations</div>
+    <a href="#autoencoder"><span class="n">01</span> Autoencoder (Recap)</a>
+    <a href="#entropy-kl"><span class="n">02</span> Entropy &amp; KL-Divergence</a>
+
+    <div class="grp">Variational Autoencoders</div>
+    <a href="#vae"><span class="n">03</span> Variational Autoencoders (VAE)</a>
+    <a href="#elbo"><span class="n">04</span> Variational Lower Bound (ELBO)</a>
+
+    <div class="grp">Advanced VAEs</div>
+    <a href="#beta-vae"><span class="n">05</span> Beta-VAE</a>
+    <a href="#vqvae"><span class="n">06</span> VQ-VAE</a>
+    <a href="#vqvae2"><span class="n">07</span> VQ-VAE-2</a>
+  </nav>
+</aside>
+
+<main>
+<div class="progress"><i id="progbar"></i></div>
+<div class="topbtn">
+  <button class="btn" id="btnTour">▶ Guided tour</button>
+  <button class="btn" id="btnTheme">☀</button>
+</div>
+
+<section id="intro">
+ <div class="wrap">
+  <div class="kicker">Interactive Edition</div>
+  <h1>Variational<br>Autoencoders</h1>
+  <p class="lead">From basic autoencoders to probabilistic generative models. We will explore how to tame the messy, irregular latent space of an autoencoder by predicting distributions, penalizing with KL divergence, and ultimately generating novel images.</p>
+ </div>
+</section>
+
+<section id="autoencoder">
+ <div class="wrap">
+  <div class="kicker">01 &middot; Foundations</div>
+  <h2>Autoencoder (Recap)</h2>
+  <p class="lead">Autoencoders compress data into a smaller representation and then try to reconstruct it. But standard autoencoders just want to copy the input. They do not care how the latent space is organized, leading to an irregular, patchy map.</p>
+
+  <div class="note"><b>Analogy first.</b> An autoencoder is like packing a suitcase in a rush. You cram everything in to make it fit (encoding) and pull it out when you arrive (decoding). But the space inside the suitcase is a mess. If you reach into a random spot, you might pull out a shoe mixed with a toothbrush.</div>
+
+  <h3>Step 1 &mdash; The bottleneck</h3>
+  <p>The network has an encoder that shrinks the input into a <strong>latent space</strong> (\(z\)), and a decoder that blows it back up to the original input (\(x\)). It forces the system to keep only the most vital details.</p>
+
+  <h3>Step 2 &mdash; The gap problem</h3>
+  <p>Standard autoencoders lose "semantics" in the gaps. We want to be able to pick <em>any</em> point in the latent space and decode it into something that looks real. But a standard autoencoder gives us an <strong>irregular latent space</strong>.</p>
+
+  <div class="card" style="margin-top:24px">
+    <h4 style="margin-top:0">Walk it (The gap)</h4>
+    <p style="margin-bottom:12px;font-size:15px">Let's encode an image of a cat to \(z_1 = [0, 1]\) and a dog to \(z_2 = [1, 0]\).</p>
+    <div class="chips">
+      <button class="btn" id="aeStep">▶ Next step</button>
+      <button class="btn" id="aeReset">↺ Reset</button>
+    </div>
+    <div class="readout" id="aeOut" style="min-height:100px;margin-top:12px"></div>
+  </div>
+
+  <h4>Where this shows up in ML</h4>
+  <p>Basic autoencoders are used for denoising images or anomaly detection (anomalies reconstruct poorly), but for generation, we need to enforce structure, leading us to Variational Autoencoders.</p>
+
+  <div class="key"><b>Pitfall &mdash; sampling fails.</b> Standard autoencoders are great for compression, but terrible for generation. You cannot just sample random numbers and expect a realistic output because the space is full of holes.</div>
+
+  <p class="muted"><b>Bridge &rarr;</b> To fix this gap problem, we need a way to measure and control the shape of the latent space. Enter Entropy and KL-Divergence.</p>
+ </div>
+</section>
+
+<section id="entropy-kl">
+ <div class="wrap">
+  <div class="kicker">02 &middot; Foundations</div>
+  <h2>Entropy &amp; KL-Divergence</h2>
+  <p class="lead">To fix the autoencoder, we need a way to measure and control the shape of our latent space. We use two ideas from information theory: <strong>Entropy</strong> and <strong>KL-Divergence</strong>.</p>
+
+  <div class="note"><b>Analogy first.</b> Think of entropy as the clutter in your room. A perfectly organized room has zero entropy. KL-Divergence is like comparing your room's layout to a picture in an IKEA catalog. The bigger the difference, the higher the penalty.</div>
+
+  <h3>Step 1 &mdash; Entropy</h3>
+  <p><strong>Entropy</strong> is the expected value of information for an event. It measures disorder. For a pure, perfectly predictable system, entropy is zero.</p>
+
+  <h3>Step 2 &mdash; KL-Divergence</h3>
+  <p><strong>KL-Divergence</strong> (Kullback-Leibler Divergence) measures the difference in information content between two distributions, \(p\) and \(q\).</p>
+
+  <div class="eqbox">$$ D_{KL}(p \parallel q) = \mathbb{E}_{p(x)} \left[ \log \frac{p(x)}{q(x)} \right] $$</div>
+  <p>Here, the expectation \(\mathbb{E}\) is computed with respect to \(p(x)\). KL-Divergence is always positive, and it is <em>not</em> symmetric: \(D_{KL}(p \parallel q)\) is not the same as \(D_{KL}(q \parallel p)\).</p>
+
+  <div class="card" style="margin-top:24px">
+    <h4 style="margin-top:0">Walk it (KL-Divergence of two simple probabilities)</h4>
+    <p style="margin-bottom:12px;font-size:15px">Let \(p\) and \(q\) be two distributions over two states, \(A\) and \(B\). Let \(p(A) = 0.5, p(B) = 0.5\). Let \(q(A) = 0.8, q(B) = 0.2\).</p>
+    <div class="chips">
+      <button class="btn" id="klStep">▶ Next step</button>
+      <button class="btn" id="klReset">↺ Reset</button>
+    </div>
+    <div class="readout" id="klOut" style="min-height:100px;margin-top:12px"></div>
+  </div>
+
+  <div class="lab" id="klLabContainer">
+    <h4 style="margin-top:4px">&#9889; Divergence</h4>
+    <p class="muted" style="font-size:14px">Move the "model" distribution (pink) closer to the "target" distribution (cyan). Watch how the KL Divergence drops to zero when they perfectly overlap.</p>
+    <div class="grid2" style="align-items:start">
+      <div>
+        <div id="klSliders"></div>
+        <div class="readout" id="klDemoOut" style="margin-top:12px"></div>
+      </div>
+      <div><canvas id="klCanvas" width="440" height="220" style="width:100%;height:auto"></canvas></div>
+    </div>
+  </div>
+
+  <h4>Where this shows up in ML</h4>
+  <p>KL-Divergence is the core of the Variational Autoencoder loss function. It acts as a regularizer, forcing the network's latent groupings to match a standard Gaussian distribution, ensuring no gaps.</p>
+
+  <div class="key"><b>Pitfall &mdash; not a true distance.</b> Never treat KL-Divergence as a true "distance" metric, because it is not symmetric. The order matters!</div>
+
+  <p class="muted"><b>Bridge &rarr;</b> Now that we know how to measure the difference between distributions, let's use it to fix our autoencoder.</p>
+ </div>
+</section>
+
+<section id="vae">
+ <div class="wrap">
+  <div class="kicker">03 &middot; Variational Autoencoders</div>
+  <h2>Variational Autoencoders (VAE)</h2>
+  <p class="lead">A <strong>Variational Autoencoder (VAE)</strong> solves the gap problem by changing what the encoder outputs. Instead of outputting a single point, the encoder outputs parameters of a distribution. Usually this is the mean and variance of a Gaussian curve.</p>
+
+  <div class="note"><b>Analogy first.</b> A VAE draws a circle and says the arrow will land inside it. The circles overlap. There are no empty spots on the target.</div>
+
+  <h3>Step 1 &mdash; Distribution instead of point</h3>
+  <p>During training, we sample a random point \(z\) from this distribution and pass it to the decoder. Because the decoder must learn to reconstruct the original image from <em>any</em> point in that cloud, it learns a smooth, continuous mapping.</p>
+
+  <h3>Step 2 &mdash; The Reparameterization Trick</h3>
+  <p>You cannot backpropagate through a random sampling step. To fix this, VAEs use the <strong>reparameterization trick</strong>:</p>
+  <div class="eqbox">$$ z = \mu + \sigma \odot \epsilon $$</div>
+  <p>where \(\epsilon\) is random noise sampled from a standard normal distribution. The randomness is pushed to the side, allowing gradients to flow safely through \(\mu\) and \(\sigma\).</p>
+
+  <div class="card" style="margin-top:24px">
+    <h4 style="margin-top:0">Walk it (Sampling from the latent cloud)</h4>
+    <p style="margin-bottom:12px;font-size:15px">Suppose the encoder looks at a cat image and outputs a mean \(\mu = [0, 0]\) and standard deviation \(\sigma = [1, 1]\).</p>
+    <div class="chips">
+      <button class="btn" id="vaeStep">▶ Next step</button>
+      <button class="btn" id="vaeReset">↺ Reset</button>
+    </div>
+    <div class="readout" id="vaeOut" style="min-height:100px;margin-top:12px"></div>
+  </div>
+
+  <div class="lab" id="vaeLabContainer">
+    <h4 style="margin-top:4px">&#9889; Exploring the Latent Manifold</h4>
+    <p class="muted" style="font-size:14px">Move the slider to travel along the \(z\) axis of a 1D latent space. The generated "image" (a simple curve) smoothly morphs from one shape to another, showing there are no "gaps" in the VAE latent space.</p>
+    <div class="grid2" style="align-items:start">
+      <div>
+        <div id="vaeSliders"></div>
+        <div class="readout" id="vaeDemoOut" style="margin-top:12px"></div>
+      </div>
+      <div><canvas id="vaeCanvas" width="440" height="220" style="width:100%;height:auto"></canvas></div>
+    </div>
+  </div>
+
+  <h4>Where this shows up in ML</h4>
+  <p>VAEs are a foundational generative model. They are used to generate new faces, create interpolations, and serve as the basis for more advanced models like Diffusion models.</p>
+
+  <div class="key"><b>Pitfall &mdash; blurry reconstructions.</b> Because the VAE trains on probability clouds and uses Mean Squared Error for reconstruction, its outputs often look blurry compared to GANs. It is averaging out the details.</div>
+
+  <p class="muted"><b>Bridge &rarr;</b> Now we have a distribution, but how do we train the network to find it? We maximize the ELBO.</p>
+ </div>
+</section>
+
+<section id="elbo">
+ <div class="wrap">
+  <div class="kicker">04 &middot; Variational Autoencoders</div>
+  <h2>Variational Lower Bound (ELBO)</h2>
+  <p class="lead">To train a VAE, we want to maximize the likelihood of our data, \(p_\theta(x)\). But computing this directly is impossible (intractable) because we would have to check every possible latent variable \(z\).</p>
+
+  <div class="note"><b>Analogy first.</b> We cannot measure the exact height of the mountain. But we can measure the height of a base camp that is always below the peak. If we push the base camp higher, we guarantee the peak is at least that high.</div>
+
+  <h3>Step 1 &mdash; The ELBO</h3>
+  <p>Instead of maximizing \(p_\theta(x)\), we maximize a tractable stand-in called the <strong>Evidence Lower Bound (ELBO)</strong>. The ELBO has two parts:</p>
+
+  <div class="eqbox">$$ \text{ELBO} = \mathbb{E}_{q_\phi(z|x)} \left[ \log p_\theta(x|z) \right] - D_{KL}(q_\phi(z|x) \parallel p(z)) $$</div>
+
+  <h3>Step 2 &mdash; Two competing goals</h3>
+  <p>1. <strong>Reconstruction loss</strong>: \(\mathbb{E}_{q_\phi(z|x)} \left[ \log p_\theta(x|z) \right]\). This rewards the model for accurately reconstructing the input \(x\) from the latent sample \(z\).</p>
+  <p>2. <strong>KL Divergence penalty</strong>: \(D_{KL}(q_\phi(z|x) \parallel p(z))\). This penalizes the encoder if its learned distribution \(q_\phi(z|x)\) strays too far from the prior \(p(z)\) (usually a standard normal distribution).</p>
+
+  <div class="card" style="margin-top:24px">
+    <h4 style="margin-top:0">Walk it (Calculating the ELBO)</h4>
+    <p style="margin-bottom:12px;font-size:15px">Assume the reconstruction loss is \(10\) (higher is better likelihood), and the KL penalty is \(2\).</p>
+    <div class="chips">
+      <button class="btn" id="elboStep">▶ Next step</button>
+      <button class="btn" id="elboReset">↺ Reset</button>
+    </div>
+    <div class="readout" id="elboOut" style="min-height:100px;margin-top:12px"></div>
+  </div>
+
+  <h4>Where this shows up in ML</h4>
+  <p>The ELBO is the workhorse objective for variational inference across machine learning, appearing not just in VAEs but in Bayesian neural networks and diffusion models.</p>
+
+  <div class="key"><b>Pitfall &mdash; ignoring the KL term.</b> Do not think of the KL term as just an error to minimize. It is a <em>regularizer</em>. Without it, the VAE would shrink the variance to zero and become a standard autoencoder, destroying the ability to generate new data.</div>
+
+  <p class="muted"><b>Bridge &rarr;</b> The ELBO gives us a good overall shape, but what if the features inside the latent space are tangled up? We can fix that with a small tweak.</p>
+ </div>
+</section>
+
+<section id="beta-vae">
+ <div class="wrap">
+  <div class="kicker">05 &middot; Advanced VAEs</div>
+  <h2>Beta-VAE</h2>
+  <p class="lead">The standard VAE is great, but its latent dimensions might mix features together. We want <strong>disentangled representations</strong>, where each dimension of \(z\) controls one interpretable feature.</p>
+
+  <div class="note"><b>Analogy first.</b> Disentanglement is like having separate volume, bass, and treble knobs on a stereo. If the knobs were tangled, turning up the volume might also randomly change the bass. Beta-VAE forces the network to learn separate, independent knobs for the features.</div>
+
+  <h3>Step 1 &mdash; Adding Beta</h3>
+  <p>To force disentanglement, <strong>Beta-VAE</strong> (\(\beta\)-VAE) simply adds a multiplier, \(\beta\), to the KL-Divergence penalty in the ELBO:</p>
+  <div class="eqbox">$$ L = \mathbb{E}_{q_\phi(z|x)} \left[ \log p_\theta(x|z) \right] - \beta D_{KL}(q_\phi(z|x) \parallel p(z)) $$</div>
+  <p>When \(\beta = 1\), this is just a standard VAE. When \(\beta > 1\), we put stronger pressure on the latent distribution to match the independent, un-correlated prior. This heavy penalty forces the network to store information as efficiently as possible, aligning features with the independent axes of the latent space.</p>
+
+  <div class="card" style="margin-top:24px">
+    <h4 style="margin-top:0">Walk it (Adjusting the Beta penalty)</h4>
+    <p style="margin-bottom:12px;font-size:15px">Suppose the standard KL penalty is \(2.0\).</p>
+    <div class="chips">
+      <button class="btn" id="betaStep">▶ Next step</button>
+      <button class="btn" id="betaReset">↺ Reset</button>
+    </div>
+    <div class="readout" id="betaOut" style="min-height:100px;margin-top:12px"></div>
+  </div>
+
+  <h4>Where this shows up in ML</h4>
+  <p>Disentangled representations are highly sought after for controllable generation and fairness. If a model disentangles "skin color" from "criminality prediction" or "lighting" from "identity," it is much safer and more useful to deploy.</p>
+
+  <div class="key"><b>Pitfall &mdash; ignoring reconstruction.</b> If you make \(\beta\) too high, the network ignores the reconstruction loss completely. It will just output a perfect, independent Gaussian that decodes into blurry mush.</div>
+
+  <p class="muted"><b>Bridge &rarr;</b> Now our space is disentangled, but it is still continuous. What if we want to model things that are naturally discrete, like words?</p>
+ </div>
+</section>
+
+<section id="vqvae">
+ <div class="wrap">
+  <div class="kicker">06 &middot; Advanced VAEs</div>
+  <h2>VQ-VAE</h2>
+  <p class="lead">Standard VAEs use continuous numbers. But many things in the real world are discrete. The <strong>Vector Quantized VAE (VQ-VAE)</strong> replaces the continuous latent space with a discrete set of codes.</p>
+
+  <div class="note"><b>Analogy first.</b> Instead of giving exact RGB values, you just say "Blue." VQ-VAE snaps the messy output of the encoder to the nearest item in a dictionary.</div>
+
+  <h3>Step 1 &mdash; The Dictionary</h3>
+  <p>The VQ-VAE has a learned dictionary of vectors, \(e_k\). The encoder outputs a continuous vector, \(z_e(x)\). Then, we find the dictionary vector \(e_i\) that is closest to \(z_e(x)\) and pass \(e_i\) to the decoder.</p>
+
+  <h3>Step 2 &mdash; The Stop-Gradient</h3>
+  <p>The gradient cannot flow through this "snap to nearest" step. To fix this, VQ-VAE uses a <strong>stop-gradient</strong> operator, \(sg\). During the backward pass, it copies the gradients straight from the decoder to the encoder.</p>
+  <div class="eqbox">$$ L = \text{Reconstruction} + \| sg(z_e(x)) - e \|_2^2 + \beta \| z_e(x) - sg(e) \|_2^2 $$</div>
+
+  <div class="card" style="margin-top:24px">
+    <h4 style="margin-top:0">Walk it (Snapping to nearest)</h4>
+    <p style="margin-bottom:12px;font-size:15px">Let encoder output \(z = [0.2, 0.9]\). Dictionary vectors: \(e_1 = [0, 0]\), \(e_2 = [0, 1]\).</p>
+    <div class="chips">
+      <button class="btn" id="vqvaeStep">▶ Next step</button>
+      <button class="btn" id="vqvaeReset">↺ Reset</button>
+    </div>
+    <div class="readout" id="vqvaeOut" style="min-height:100px;margin-top:12px"></div>
+  </div>
+
+  <div class="lab" id="vqLabContainer">
+    <h4 style="margin-top:4px">&#9889; Nearest Neighbor Quantization</h4>
+    <p class="muted" style="font-size:14px">Move the encoder output \(z_e(x)\) (cyan dot). Watch how the VQ-VAE immediately snaps it to the nearest dictionary embedding \(e_k\) (pink squares).</p>
+    <div class="grid2" style="align-items:start">
+      <div>
+        <div id="vqSliders"></div>
+        <div class="readout" id="vqDemoOut" style="margin-top:12px"></div>
+      </div>
+      <div><canvas id="vqCanvas" width="440" height="340" style="width:100%;height:auto"></canvas></div>
+    </div>
+  </div>
+
+  <h4>Where this shows up in ML</h4>
+  <p>VQ-VAEs are massive in modern AI. They are the foundation for generating high-quality speech, transferring voice styles, and are a key component in large text-to-image models.</p>
+
+  <div class="key"><b>Pitfall &mdash; prior training.</b> Because the latent space is discrete, you can no longer sample by picking random numbers from a Gaussian. You must train a separate prior model (like PixelCNN) over the codes.</div>
+
+  <p class="muted"><b>Bridge &rarr;</b> VQ-VAE is great, but for high-resolution images, one bottleneck isn't enough.</p>
+ </div>
+</section>
+
+<section id="vqvae2">
+ <div class="wrap">
+  <div class="kicker">07 &middot; Advanced VAEs</div>
+  <h2>VQ-VAE-2</h2>
+  <p class="lead">The <strong>VQ-VAE-2</strong> scales up the original idea by using a hierarchy of latent maps. Instead of one bottleneck, it has multiple layers of discrete codes.</p>
+
+  <div class="note"><b>Analogy first.</b> First, you describe the big picture. "A woman with dark hair." Then you add details. "A small mole on her left cheek." The top layer handles global shape. The bottom handles details.</div>
+
+  <h3>Step 1 &mdash; Hierarchical Maps</h3>
+  <p>An image is compressed into a tiny map (e.g., 32&times;32) for global structure, and a larger map (e.g., 64&times;64) for local details. The decoder uses both maps to reconstruct the image. This approach allows VQ-VAE-2 to generate incredibly high-resolution, realistic images that rival GANs.</p>
+
+  <div class="card" style="margin-top:24px">
+    <h4 style="margin-top:0">Walk it (Compression ratios)</h4>
+    <p style="margin-bottom:12px;font-size:15px">Let the original image be \(256 \times 256 \times 3\) (color).</p>
+    <div class="chips">
+      <button class="btn" id="vqvae2Step">▶ Next step</button>
+      <button class="btn" id="vqvae2Reset">↺ Reset</button>
+    </div>
+    <div class="readout" id="vqvae2Out" style="min-height:100px;margin-top:12px"></div>
+  </div>
+
+  <h4>Where this shows up in ML</h4>
+  <p>Hierarchical discrete autoencoders compress images for powerful autoregressive or diffusion models. They separate the heavy lifting of structure generation from painting fine pixels.</p>
+
+  <div class="key"><b>Pitfall &mdash; slow sampling.</b> While VQ-VAE-2 avoids GAN mode collapse, generating an image requires running the autoregressive prior step-by-step over the discrete codes, which takes time.</div>
+ </div>
+</section>
+
+<div class="foot">
+  Interactive lecture template &middot; reusable house style (sidebar, progress, theme toggle, guided tour, slider + canvas helpers).
+  Math rendered with MathJax.
+</div>
+</main>
+</div>
+
+<div class="spot" id="spot"></div>
+<div class="storycard" id="storycard">
+  <div class="t" id="scT"></div>
+  <div class="x" id="scX"></div>
+  <div class="nav">
+    <div class="chips">
+      <button class="btn" id="scPrev">◀</button>
+      <button class="btn" id="scPlay">⏸</button>
+      <button class="btn" id="scNext">▶</button>
+    </div>
+    <button class="btn" id="scExit">Exit</button>
+  </div>
+</div>
+
+<script>
+/* shared utilities */
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const fmt=(x,d=3)=>{ if(Math.abs(x)<1e-9)x=0; return x.toFixed(d); };
+const sigmoid=z=>1/(1+Math.exp(-z));
+
+function makeSlider(host,opt,onInput){
+  const row=document.createElement('div');row.className='ctrl';
+  const lab=document.createElement('label');lab.innerHTML=opt.label;
+  const inp=document.createElement('input');
+  inp.type='range';inp.id=opt.id;
+  inp.min=opt.min;inp.max=opt.max;inp.step=opt.step;inp.value=opt.value;
+  const val=document.createElement('span');val.className='val';
+  const dec=(opt.step+'').includes('.')?(opt.step+'').split('.')[1].length:0;
+  const show=()=>{val.textContent=parseFloat(inp.value).toFixed(dec);};
+  inp.addEventListener('input',()=>{show();if(onInput)onInput(parseFloat(inp.value));});
+  row.appendChild(lab);row.appendChild(inp);row.appendChild(val);host.appendChild(row);
+  show();
+  return ()=>parseFloat(inp.value);
+}
+
+function setupCanvas(canvas,drawFn){
+  const ctx=canvas.getContext('2d');
+  function resize(){
+    const dpr=Math.max(1,window.devicePixelRatio||1);
+    const rect=canvas.getBoundingClientRect();
+    const cssW=rect.width||canvas.width;
+    const cssH=cssW*(canvas.height/canvas.width);
+    canvas.style.height=cssH+'px';
+    canvas.width=Math.round(cssW*dpr);
+    canvas.height=Math.round(cssH*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    drawFn(ctx,cssW,cssH);
+  }
+  window.addEventListener('resize',resize);
+  resize();
+  return {redraw:resize, ctx};
+}
+
+/* layout & scroll */
+const tocLinks=$$('#toc a');
+const sections=tocLinks.map(a=>$(a.getAttribute('href')));
+function onScroll(){
+  const st=window.scrollY, h=document.body.scrollHeight-window.innerHeight;
+  $('#progbar').style.width=(h>0?100*st/h:0)+'%';
+  let idx=0;
+  sections.forEach((sec,i)=>{ if(sec&&sec.offsetTop-120<=st) idx=i; });
+  tocLinks.forEach((a,i)=>a.classList.toggle('active',i===idx));
+}
+window.addEventListener('scroll',onScroll,{passive:true});
+
+/* scroll-reveal */
+function initReveal(){
+  const obs=new IntersectionObserver(es=>{
+    es.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('visible'); });
+  },{threshold:0.1});
+  $$('h2, h3, h4, p, .card, .note, .key, .eqbox').forEach(el=>{
+    if(!el.closest('.lab') && !el.closest('canvas')) {
+      el.classList.add('reveal'); obs.observe(el);
+    }
+  });
+}
+
+/* guided tour */
+const STORY=[
+ {id:'intro',t:'Welcome',x:'Foundations of VAEs, each with a live canvas you can drag. Intuition first, then exact math. Use the prev / next buttons or the arrow keys; press space to pause.'},
+];
+let sIdx=-1, sTimer=null, sPlay=true;
+function showStory(i){
+  sIdx=clamp(i,0,STORY.length-1);
+  const s=STORY[sIdx];
+  $('#scT').innerHTML=s.t; $('#scX').innerHTML=s.x;
+  const sec=$( '#'+s.id );
+  if(sec){
+    window.scrollTo({top:sec.offsetTop-40, behavior:'smooth'});
+    const spot=$('#spot'), h2=$('h2',sec)||$('h1',sec);
+    if(h2){
+      const r=h2.getBoundingClientRect();
+      spot.style.left=(r.left+r.width/2)+'px';
+      spot.style.top=(r.top+window.scrollY+r.height/2)+'px';
+      spot.style.width=(r.width+80)+'px';
+      spot.style.height=(r.height+60)+'px';
+      spot.classList.remove('active');
+      setTimeout(()=>spot.classList.add('active'), 400);
+    }
+  }
+  if(sPlay) sTimer=setTimeout(()=>showStory(sIdx+1), 8000);
+}
+function stopStory(){ clearTimeout(sTimer); sPlay=false; $('#scPlay').innerHTML='▶'; }
+function initStory(){
+  $('#btnTour').addEventListener('click',()=>{
+    $('#storycard').classList.add('active'); sPlay=true; $('#scPlay').innerHTML='⏸'; showStory(0);
+  });
+  $('#scExit').addEventListener('click',()=>{
+    stopStory(); $('#storycard').classList.remove('active'); $('#spot').classList.remove('active');
+  });
+  $('#scPrev').addEventListener('click',()=>{ stopStory(); showStory(sIdx-1); });
+  $('#scNext').addEventListener('click',()=>{ stopStory(); showStory(sIdx+1); });
+  $('#scPlay').addEventListener('click',()=>{
+    if(sPlay) stopStory(); else { sPlay=true; $('#scPlay').innerHTML='⏸'; showStory(sIdx+1); }
+  });
+  window.addEventListener('keydown',e=>{
+    if(!$('#storycard').classList.contains('active')) return;
+    if(e.key==='ArrowRight') { stopStory(); showStory(sIdx+1); }
+    if(e.key==='ArrowLeft')  { stopStory(); showStory(sIdx-1); }
+    if(e.key===' '||e.key==='Spacebar') { e.preventDefault(); $('#scPlay').click(); }
+  });
+}
+
+/* registry: each demo registers itself, then runDemos() fires them */
+window.__demos=[];
+
+window.__demos.push(function(){
+  // KL Divergence interactive
+  const container=$('#klSliders'); if(!container)return;
+  const getQMu = makeSlider(container, {id:'qMu', label:'Model μ', min:-3, max:3, step:0.1, value:1.0});
+  const getQSig = makeSlider(container, {id:'qSig', label:'Model σ', min:0.5, max:2.5, step:0.1, value:1.5});
+  const c=$('#klCanvas'); if(!c)return;
+  const cv=setupCanvas(c, (ctx,W,H)=>{
+    ctx.clearRect(0,0,W,H);
+    const pMu = 0, pSig = 1.0;
+    const qMu = getQMu(), qSig = getQSig();
+
+    const pad = 20;
+    const X = v => pad + ((v - (-4)) / 8) * (W - 2*pad);
+    const Y = v => H - pad - (v / 0.8) * (H - 2*pad);
+
+    const pdf = (x, m, s) => (1 / (s * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - m) / s, 2));
+
+    // Draw P (cyan)
+    ctx.strokeStyle = '#38f0d8'; ctx.lineWidth = 2; ctx.beginPath();
+    for(let x=-4; x<=4; x+=0.1) {
+      if(x===-4) ctx.moveTo(X(x), Y(pdf(x, pMu, pSig)));
+      else ctx.lineTo(X(x), Y(pdf(x, pMu, pSig)));
+    }
+    ctx.stroke();
+
+    // Draw Q (pink)
+    ctx.strokeStyle = '#ff6ec7'; ctx.lineWidth = 2; ctx.beginPath();
+    for(let x=-4; x<=4; x+=0.1) {
+      if(x===-4) ctx.moveTo(X(x), Y(pdf(x, qMu, qSig)));
+      else ctx.lineTo(X(x), Y(pdf(x, qMu, qSig)));
+    }
+    ctx.stroke();
+
+    // calculate KL (approximate integration)
+    let kl = 0;
+    for(let x=-4; x<=4; x+=0.1) {
+      const px = pdf(x, pMu, pSig);
+      const qx = pdf(x, qMu, qSig);
+      if(px > 1e-5 && qx > 1e-5) kl += px * Math.log(px / qx) * 0.1;
+    }
+
+    if(kl < 0) kl = 0; // numerical 0
+    $('#klDemoOut').innerHTML = 'KL( P || Q ) = <span class="g">' + fmt(kl, 3) + '</span>';
+  });
+
+  const redraw = () => { cv.redraw(); };
+  $('#qMu').addEventListener('input', redraw);
+  $('#qSig').addEventListener('input', redraw);
+  redraw();
+});
+
+window.__demos.push(function(){
+  // VAE latent interpolation
+  const container=$('#vaeSliders'); if(!container)return;
+  const getZ = makeSlider(container, {id:'vZ', label:'Latent z', min:-3, max:3, step:0.1, value:0.0});
+  const c=$('#vaeCanvas'); if(!c)return;
+  const cv=setupCanvas(c, (ctx,W,H)=>{
+    ctx.clearRect(0,0,W,H);
+    const z = getZ();
+
+    const pad = 20;
+    const X = v => pad + ((v - (-3)) / 6) * (W - 2*pad);
+    const Y = v => H - pad - ((v - (-1)) / 3) * (H - 2*pad); // Y from -1 to 2
+
+    // The "decoder" turns z into a curve: f(x) = Math.sin(x + z) + z*0.2
+    const dec = (x, z) => Math.sin(x + z) + z*0.2;
+
+    ctx.strokeStyle = '#38f0d8'; ctx.lineWidth = 3; ctx.beginPath();
+    for(let x=-3; x<=3; x+=0.1) {
+      if(x===-3) ctx.moveTo(X(x), Y(dec(x, z)));
+      else ctx.lineTo(X(x), Y(dec(x, z)));
+    }
+    ctx.stroke();
+
+    $('#vaeDemoOut').innerHTML = 'Latent z = <span class="hl">' + fmt(z, 2) + '</span>\nDecoding to smooth function.';
+  });
+
+  const redraw = () => { cv.redraw(); };
+  $('#vZ').addEventListener('input', redraw);
+  redraw();
+});
+
+window.__demos.push(function(){
+  // VQ-VAE nearest neighbor interactive
+  const container=$('#vqSliders'); if(!container)return;
+  const getZx = makeSlider(container, {id:'vQx', label:'z (x-axis)', min:0, max:10, step:0.1, value:4.0});
+  const getZy = makeSlider(container, {id:'vQy', label:'z (y-axis)', min:0, max:10, step:0.1, value:6.0});
+  const c=$('#vqCanvas'); if(!c)return;
+  const cv=setupCanvas(c, (ctx,W,H)=>{
+    ctx.clearRect(0,0,W,H);
+    const zx = getZx(), zy = getZy();
+
+    const pad = 20;
+    const X = v => pad + (v / 10) * (W - 2*pad);
+    const Y = v => H - pad - (v / 10) * (H - 2*pad); // flip Y
+
+    // Dictionary
+    const dict = [
+      {id: 1, x: 2, y: 8},
+      {id: 2, x: 8, y: 8},
+      {id: 3, x: 3, y: 3},
+      {id: 4, x: 7, y: 3}
+    ];
+
+    // Find nearest
+    let nearest = null;
+    let minDist = Infinity;
+    dict.forEach(e => {
+      const d = Math.sqrt((e.x - zx)**2 + (e.y - zy)**2);
+      if(d < minDist) { minDist = d; nearest = e; }
+    });
+
+    // Draw dictionary
+    ctx.fillStyle = '#ff6ec7'; // pink
+    dict.forEach(e => {
+      ctx.fillRect(X(e.x)-6, Y(e.y)-6, 12, 12);
+      ctx.font='11px monospace'; ctx.fillText('e'+e.id, X(e.x)+10, Y(e.y));
+    });
+
+    // Draw snap arrow
+    if(nearest) {
+      ctx.strokeStyle = '#62e88a'; ctx.lineWidth = 2; ctx.beginPath(); // green
+      ctx.moveTo(X(zx), Y(zy)); ctx.lineTo(X(nearest.x), Y(nearest.y)); ctx.stroke();
+    }
+
+    // Draw z
+    ctx.fillStyle = '#38f0d8'; ctx.beginPath(); ctx.arc(X(zx), Y(zy), 5, 0, 7); ctx.fill(); // cyan
+    ctx.fillText('z_e', X(zx)-20, Y(zy)-10);
+
+    $('#vqDemoOut').innerHTML = 'z_e = [' + fmt(zx, 1) + ', ' + fmt(zy, 1) + ']\n' +
+      'Nearest is <span class="g">e' + nearest.id + '</span> at [' + nearest.x + ', ' + nearest.y + ']\n' +
+      'Distance: ' + fmt(minDist, 2);
+  });
+
+  const redraw = () => { cv.redraw(); };
+  $('#vQx').addEventListener('input', redraw);
+  $('#vQy').addEventListener('input', redraw);
+  redraw();
+});
+
+function runDemos(){ window.__demos.forEach(f=>{try{f();}catch(e){console.error(e);}}); }
+
+/* theme toggle with localStorage */
+function initTheme(){
+  const btn=$('#btnTheme');
+  btn.addEventListener('click',()=>{
+    const root=document.documentElement;
+    const isLight=root.getAttribute('data-theme')==='light';
+    root.setAttribute('data-theme', isLight?'dark':'light');
+    try{localStorage.setItem('lecTheme', isLight?'dark':'light');}catch(e){}
+    btn.innerHTML=isLight?'☀':'☾';
+  });
+  try{if(localStorage.getItem('lecTheme')==='light') btn.innerHTML='☾';}catch(e){}
+}
+
+/* boot */
+window.addEventListener('load',()=>{
+  runDemos(); initTheme(); initReveal(); initStory(); onScroll();
+  if(window.MathJax&&MathJax.typesetPromise)MathJax.typesetPromise();
+});
+</script>
+</body>
+</html>
